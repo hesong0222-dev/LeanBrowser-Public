@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>팀 배치 보드</title>
+<style>
+  :root {
+    --bg: #f5f5f2;
+    --panel: #ffffff;
+    --line: #deded8;
+    --text: #1a1a18;
+    --muted: #787872;
+    --a: #3056d3;
+    --b: #d24b42;
+    --shadow: 0 8px 28px rgba(0,0,0,.07);
+    --radius: 18px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Noto Sans KR", sans-serif; }
+  body { padding: max(16px, env(safe-area-inset-top)) 16px max(28px, env(safe-area-inset-bottom)); }
+  button, input, textarea { font: inherit; }
+  button { border: 0; cursor: pointer; }
+
+  .app { max-width: 1500px; margin: 0 auto; }
+  .topbar {
+    display: flex; align-items: center; gap: 12px; justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .title-wrap h1 { font-size: clamp(22px, 3vw, 32px); margin: 0; letter-spacing: -.04em; }
+  .title-wrap p { margin: 5px 0 0; color: var(--muted); font-size: 14px; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .btn { background: #fff; color: var(--text); border: 1px solid var(--line); border-radius: 12px; padding: 10px 13px; font-weight: 700; }
+  .btn:hover { background: #fafaf8; }
+  .btn.danger { color: #b92c23; }
+
+  .board {
+    display: grid;
+    grid-template-columns: minmax(300px,1fr) minmax(230px,.64fr) minmax(300px,1fr);
+    gap: 14px;
+    align-items: start;
+  }
+  .team, .pool {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .team-head, .pool-head { padding: 16px 17px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.88); position: sticky; top: 0; z-index: 5; backdrop-filter: blur(16px); }
+  .team-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .team-name { font-size: 21px; font-weight: 900; letter-spacing: -.03em; }
+  .team-count { font-size: 13px; color: var(--muted); font-weight: 700; }
+  .team-a .team-name { color: var(--a); }
+  .team-b .team-name { color: var(--b); }
+
+  .sections { padding: 10px; display: grid; gap: 9px; }
+  .section {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    min-height: 92px;
+    background: #fbfbf9;
+    transition: .15s ease;
+  }
+  .section.drag-over, .section.selected-target { outline: 3px solid rgba(48,86,211,.18); border-color: #8aa1ef; background: #f5f7ff; transform: translateY(-1px); }
+  .team-b .section.drag-over, .team-b .section.selected-target { outline-color: rgba(210,75,66,.15); border-color: #e39a94; background: #fff7f6; }
+  .section-title { padding: 10px 11px 6px; color: var(--muted); font-size: 12px; font-weight: 900; letter-spacing: .02em; display: flex; justify-content: space-between; gap: 8px; }
+  .piece-zone { min-height: 52px; padding: 4px 8px 10px; display: flex; flex-wrap: wrap; gap: 7px; align-content: flex-start; }
+  .empty-hint { color: #aaa9a3; font-size: 12px; padding: 7px 4px 3px; user-select: none; pointer-events: none; }
+
+  .pool { position: sticky; top: 12px; }
+  .pool-head h2 { margin: 0; font-size: 17px; }
+  .pool-head p { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
+  .add-box { padding: 11px; border-bottom: 1px solid var(--line); display: grid; gap: 8px; }
+  textarea { width: 100%; resize: vertical; min-height: 74px; max-height: 180px; border: 1px solid var(--line); background: #fbfbf9; border-radius: 12px; padding: 10px 11px; outline: none; }
+  textarea:focus { border-color: #9f9f97; background: #fff; }
+  .add-row { display: flex; gap: 8px; }
+  .add-row .btn { flex: 1; }
+  .pool-zone { min-height: 220px; padding: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-content: flex-start; }
+  .pool-zone.drag-over { background: #f1f1ec; }
+
+  .piece {
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+    background: #fff;
+    border: 1px solid #d7d7d0;
+    border-radius: 999px;
+    padding: 8px 11px;
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-weight: 800;
+    font-size: 14px;
+    line-height: 1;
+    box-shadow: 0 2px 5px rgba(0,0,0,.04);
+    cursor: grab;
+    transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+  }
+  .piece:hover { transform: translateY(-1px); box-shadow: 0 4px 9px rgba(0,0,0,.07); }
+  .piece.selected { border-color: #1f1f1c; box-shadow: 0 0 0 3px rgba(0,0,0,.08); transform: scale(1.03); }
+  .piece.dragging { opacity: .35; }
+  .piece .x { color: #a4a39d; font-size: 15px; font-weight: 600; margin-left: 1px; cursor: pointer; }
+  .piece .x:hover { color: #c63c33; }
+
+  .drag-ghost {
+    position: fixed;
+    left: 0; top: 0;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: .94;
+    transform: translate(-50%, -50%) scale(1.05);
+    box-shadow: 0 10px 26px rgba(0,0,0,.18);
+  }
+
+  .tap-tip { display: none; margin: 0 0 12px; padding: 10px 12px; border-radius: 12px; background: #151513; color: white; font-size: 13px; font-weight: 700; text-align: center; }
+  .tap-tip.show { display: block; }
+
+  @media (max-width: 900px) {
+    body { padding-left: 10px; padding-right: 10px; }
+    .topbar { align-items: flex-start; }
+    .board { grid-template-columns: 1fr 1fr; }
+    .pool { grid-column: 1 / -1; grid-row: 1; position: static; }
+    .pool-zone { min-height: 110px; }
+    .team { grid-row: 2; }
+  }
+  @media (max-width: 650px) {
+    .title-wrap p { display: none; }
+    .actions .btn { padding: 9px 10px; font-size: 13px; }
+    .board { gap: 8px; }
+    .sections { padding: 7px; gap: 7px; }
+    .section { min-height: 84px; border-radius: 12px; }
+    .section-title { font-size: 11px; padding: 8px 8px 4px; }
+    .piece-zone { padding: 4px 6px 8px; gap: 5px; }
+    .piece { font-size: 13px; padding: 8px 9px; }
+    .team-head, .pool-head { padding: 12px; }
+    .team-name { font-size: 18px; }
+    .team-count { font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div class="title-wrap">
+      <h1>팀 배치 보드</h1>
+      <p>이름을 끌어서 A/B팀의 역할 섹션에 배치하세요. 탭으로도 이동할 수 있습니다.</p>
+    </div>
+    <div class="actions">
+      <button class="btn" id="returnAll">전부 대기</button>
+      <button class="btn danger" id="resetAll">초기화</button>
+    </div>
+  </div>
+
+  <div class="tap-tip" id="tapTip">선택됨 · 이동할 섹션을 탭하세요</div>
+
+  <main class="board">
+    <section class="team team-a" data-team="A">
+      <div class="team-head">
+        <div class="team-name">A TEAM</div>
+        <div class="team-count" id="countA">0명</div>
+      </div>
+      <div class="sections" id="teamA"></div>
+    </section>
+
+    <section class="pool" data-location="pool">
+      <div class="pool-head">
+        <h2>사람</h2>
+        <p>이름을 여러 줄 또는 쉼표로 한 번에 추가할 수 있어요.</p>
+      </div>
+      <div class="add-box">
+        <textarea id="nameInput" placeholder="예) 홍길동\n김민수\n이서연"></textarea>
+        <div class="add-row">
+          <button class="btn" id="addNames">이름 추가</button>
+        </div>
+      </div>
+      <div class="pool-zone dropzone" id="poolZone" data-target="pool"></div>
+    </section>
+
+    <section class="team team-b" data-team="B">
+      <div class="team-head">
+        <div class="team-name">B TEAM</div>
+        <div class="team-count" id="countB">0명</div>
+      </div>
+      <div class="sections" id="teamB"></div>
+    </section>
+  </main>
+</div>
+
+<script>
+(() => {
+  const ROLES = ['악기팀', '워십팀', '말씀사역', '물품', '음식', '학교사역'];
+  const STORAGE = 'team-board-v1';
+  const state = loadState();
+  let selectedId = null;
+  let pointerDrag = null;
+
+  const teamA = document.getElementById('teamA');
+  const teamB = document.getElementById('teamB');
+  const poolZone = document.getElementById('poolZone');
+  const tapTip = document.getElementById('tapTip');
+
+  function defaultState() {
+    return { people: {}, order: [], placements: {} };
+  }
+
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(STORAGE);
+      return raw ? { ...defaultState(), ...JSON.parse(raw) } : defaultState();
+    } catch { return defaultState(); }
+  }
+
+  function save() { localStorage.setItem(STORAGE, JSON.stringify(state)); }
+  function uid() { return 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+  function buildSections(container, team) {
+    container.innerHTML = '';
+    ROLES.forEach(role => {
+      const section = document.createElement('div');
+      section.className = 'section dropzone';
+      section.dataset.target = `${team}|${role}`;
+      section.innerHTML = `<div class="section-title"><span>${role}</span><span class="role-count">0</span></div><div class="piece-zone"></div>`;
+      section.addEventListener('click', e => {
+        if (selectedId && !e.target.closest('.piece')) movePerson(selectedId, section.dataset.target);
+      });
+      container.appendChild(section);
+    });
+  }
+
+  function render() {
+    buildSections(teamA, 'A');
+    buildSections(teamB, 'B');
+    poolZone.innerHTML = '';
+
+    for (const id of state.order) {
+      const name = state.people[id];
+      if (!name) continue;
+      const target = state.placements[id] || 'pool';
+      const piece = makePiece(id, name);
+      const zone = getTargetZone(target);
+      if (zone) zone.appendChild(piece);
+    }
+
+    document.querySelectorAll('.section').forEach(section => {
+      const zone = section.querySelector('.piece-zone');
+      const count = zone.querySelectorAll('.piece').length;
+      section.querySelector('.role-count').textContent = count || '';
+      if (!count) {
+        const hint = document.createElement('div');
+        hint.className = 'empty-hint';
+        hint.textContent = '여기에 배치';
+        zone.appendChild(hint);
+      }
+    });
+
+    const countTeam = team => Object.values(state.placements).filter(v => v.startsWith(team + '|')).length;
+    document.getElementById('countA').textContent = countTeam('A') + '명';
+    document.getElementById('countB').textContent = countTeam('B') + '명';
+    tapTip.classList.toggle('show', !!selectedId);
+  }
+
+  function getTargetZone(target) {
+    if (target === 'pool') return poolZone;
+    const section = document.querySelector(`.section[data-target="${cssEscape(target)}"]`);
+    return section?.querySelector('.piece-zone') || null;
+  }
+
+  function cssEscape(s) { return CSS.escape ? CSS.escape(s) : s.replace(/(["\\])/g, '\\$1'); }
+
+  function makePiece(id, name) {
+    const el = document.createElement('div');
+    el.className = 'piece' + (selectedId === id ? ' selected' : '');
+    el.draggable = true;
+    el.dataset.id = id;
+    el.innerHTML = `<span class="name"></span><span class="x" title="삭제">×</span>`;
+    el.querySelector('.name').textContent = name;
+
+    el.querySelector('.x').addEventListener('click', e => {
+      e.stopPropagation();
+      deletePerson(id);
+    });
+
+    el.addEventListener('click', e => {
+      if (e.target.closest('.x')) return;
+      selectedId = selectedId === id ? null : id;
+      render();
+    });
+
+    el.addEventListener('dblclick', e => {
+      e.preventDefault();
+      const next = prompt('이름 수정', state.people[id]);
+      if (next && next.trim()) {
+        state.people[id] = next.trim();
+        save(); render();
+      }
+    });
+
+    el.addEventListener('dragstart', e => {
+      e.dataTransfer.setData('text/plain', id);
+      e.dataTransfer.effectAllowed = 'move';
+      requestAnimationFrame(() => el.classList.add('dragging'));
+    });
+    el.addEventListener('dragend', () => {
+      el.classList.remove('dragging');
+      clearDropStyles();
+    });
+
+    el.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'mouse' || e.target.closest('.x')) return;
+      const startX = e.clientX, startY = e.clientY;
+      const timer = setTimeout(() => startPointerDrag(e, el, id), 130);
+      const cancel = ev => {
+        if (Math.hypot(ev.clientX - startX, ev.clientY - startY) > 8) clearTimeout(timer);
+      };
+      const cleanup = () => {
+        clearTimeout(timer);
+        window.removeEventListener('pointermove', cancel);
+        window.removeEventListener('pointerup', cleanup);
+        window.removeEventListener('pointercancel', cleanup);
+      };
+      window.addEventListener('pointermove', cancel, { passive: true });
+      window.addEventListener('pointerup', cleanup, { once: true });
+      window.addEventListener('pointercancel', cleanup, { once: true });
+    });
+
+    return el;
+  }
+
+  function startPointerDrag(e, el, id) {
+    if (pointerDrag) return;
+    try { el.setPointerCapture(e.pointerId); } catch {}
+    const ghost = el.cloneNode(true);
+    ghost.classList.add('drag-ghost');
+    ghost.classList.remove('selected');
+    ghost.style.width = el.getBoundingClientRect().width + 'px';
+    document.body.appendChild(ghost);
+    el.classList.add('dragging');
+    pointerDrag = { id, ghost, source: el, pointerId: e.pointerId };
+    moveGhost(e.clientX, e.clientY);
+    document.body.style.overflow = 'hidden';
+
+    const onMove = ev => {
+      if (!pointerDrag || ev.pointerId !== pointerDrag.pointerId) return;
+      ev.preventDefault();
+      moveGhost(ev.clientX, ev.clientY);
+      highlightAt(ev.clientX, ev.clientY);
+    };
+    const onUp = ev => {
+      if (!pointerDrag || ev.pointerId !== pointerDrag.pointerId) return;
+      const target = targetAt(ev.clientX, ev.clientY);
+      if (target) movePerson(id, target.dataset.target);
+      stopPointerDrag();
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+    window.addEventListener('pointermove', onMove, { passive: false });
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  }
+
+  function moveGhost(x, y) {
+    if (!pointerDrag) return;
+    pointerDrag.ghost.style.left = x + 'px';
+    pointerDrag.ghost.style.top = y + 'px';
+  }
+
+  function targetAt(x, y) {
+    if (!pointerDrag) return null;
+    pointerDrag.ghost.style.display = 'none';
+    const el = document.elementFromPoint(x, y);
+    pointerDrag.ghost.style.display = '';
+    return el?.closest('.dropzone') || null;
+  }
+
+  function highlightAt(x, y) {
+    clearDropStyles();
+    const target = targetAt(x, y);
+    if (target) target.classList.add('drag-over');
+  }
+
+  function stopPointerDrag() {
+    if (!pointerDrag) return;
+    pointerDrag.source.classList.remove('dragging');
+    pointerDrag.ghost.remove();
+    pointerDrag = null;
+    document.body.style.overflow = '';
+    clearDropStyles();
+  }
+
+  function clearDropStyles() { document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over')); }
+
+  function movePerson(id, target) {
+    if (!state.people[id]) return;
+    state.placements[id] = target;
+    selectedId = null;
+    save(); render();
+  }
+
+  function deletePerson(id) {
+    delete state.people[id];
+    delete state.placements[id];
+    state.order = state.order.filter(x => x !== id);
+    if (selectedId === id) selectedId = null;
+    save(); render();
+  }
+
+  function addNames() {
+    const input = document.getElementById('nameInput');
+    const names = input.value.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+    if (!names.length) return;
+    names.forEach(name => {
+      const id = uid();
+      state.people[id] = name;
+      state.order.push(id);
+      state.placements[id] = 'pool';
+    });
+    input.value = '';
+    save(); render();
+  }
+
+  function bindDrop(zone) {
+    if (zone.dataset.dropBound === '1') return;
+    zone.dataset.dropBound = '1';
+    zone.addEventListener('dragover', e => {
+      e.preventDefault();
+      zone.classList.add('drag-over');
+      e.dataTransfer.dropEffect = 'move';
+    });
+    zone.addEventListener('dragleave', e => {
+      if (!zone.contains(e.relatedTarget)) zone.classList.remove('drag-over');
+    });
+    zone.addEventListener('drop', e => {
+      e.preventDefault();
+      const id = e.dataTransfer.getData('text/plain');
+      if (id) movePerson(id, zone.dataset.target);
+      clearDropStyles();
+    });
+    zone.addEventListener('click', e => {
+      if (selectedId && !e.target.closest('.piece')) movePerson(selectedId, zone.dataset.target);
+    });
+  }
+
+  document.addEventListener('dragstart', () => setTimeout(() => document.querySelectorAll('.dropzone').forEach(z => z.classList.add('selected-target')), 0));
+  document.addEventListener('dragend', () => document.querySelectorAll('.selected-target').forEach(z => z.classList.remove('selected-target')));
+
+  document.getElementById('addNames').addEventListener('click', addNames);
+  document.getElementById('nameInput').addEventListener('keydown', e => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') addNames();
+  });
+
+  document.getElementById('returnAll').addEventListener('click', () => {
+    Object.keys(state.people).forEach(id => state.placements[id] = 'pool');
+    selectedId = null; save(); render();
+  });
+
+  document.getElementById('resetAll').addEventListener('click', () => {
+    if (!confirm('모든 이름과 배치를 지울까요?')) return;
+    state.people = {}; state.order = []; state.placements = {}; selectedId = null;
+    save(); render();
+  });
+
+  const originalRender = render;
+  render = function() {
+    originalRender();
+    document.querySelectorAll('.dropzone').forEach(bindDrop);
+  };
+
+  render();
+})();
+</script>
+</body>
+</html>
