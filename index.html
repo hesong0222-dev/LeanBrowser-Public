@@ -168,7 +168,7 @@
     <section class="pool" data-location="pool">
       <div class="pool-head">
         <h2>사람</h2>
-        <p>이름을 여러 줄 또는 쉼표로 한 번에 추가할 수 있어요.</p>
+        <p>이름 입력 후 Enter · 여러 명은 쉼표 또는 Shift+Enter로 구분할 수 있어요.</p>
       </div>
       <div class="add-box">
         <textarea id="nameInput" placeholder="예) 홍길동\n김민수\n이서연"></textarea>
@@ -310,20 +310,42 @@
 
     el.addEventListener('pointerdown', e => {
       if (e.pointerType === 'mouse' || e.target.closest('.x')) return;
-      const startX = e.clientX, startY = e.clientY;
-      const timer = setTimeout(() => startPointerDrag(e, el, id), 130);
-      const cancel = ev => {
-        if (Math.hypot(ev.clientX - startX, ev.clientY - startY) > 8) clearTimeout(timer);
-      };
-      const cleanup = () => {
+
+      const pointerId = e.pointerId;
+      const startX = e.clientX;
+      const startY = e.clientY;
+      let started = false;
+
+      const cleanupPrep = () => {
         clearTimeout(timer);
-        window.removeEventListener('pointermove', cancel);
-        window.removeEventListener('pointerup', cleanup);
-        window.removeEventListener('pointercancel', cleanup);
+        window.removeEventListener('pointermove', onPrepMove);
+        window.removeEventListener('pointerup', onPrepEnd);
+        window.removeEventListener('pointercancel', onPrepEnd);
       };
-      window.addEventListener('pointermove', cancel, { passive: true });
-      window.addEventListener('pointerup', cleanup, { once: true });
-      window.addEventListener('pointercancel', cleanup, { once: true });
+
+      const beginDrag = ev => {
+        if (started) return;
+        started = true;
+        cleanupPrep();
+        startPointerDrag(ev, el, id);
+      };
+
+      const onPrepMove = ev => {
+        if (ev.pointerId !== pointerId) return;
+        if (Math.hypot(ev.clientX - startX, ev.clientY - startY) >= 6) {
+          beginDrag(ev);
+        }
+      };
+
+      const onPrepEnd = ev => {
+        if (ev.pointerId !== pointerId) return;
+        cleanupPrep();
+      };
+
+      const timer = setTimeout(() => beginDrag(e), 110);
+      window.addEventListener('pointermove', onPrepMove, { passive: true });
+      window.addEventListener('pointerup', onPrepEnd);
+      window.addEventListener('pointercancel', onPrepEnd);
     });
 
     return el;
@@ -411,7 +433,10 @@
   function addNames() {
     const input = document.getElementById('nameInput');
     const names = input.value.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
-    if (!names.length) return;
+    if (!names.length) {
+      input.focus();
+      return;
+    }
     names.forEach(name => {
       const id = uid();
       state.people[id] = name;
@@ -419,7 +444,9 @@
       state.placements[id] = 'pool';
     });
     input.value = '';
-    save(); render();
+    save();
+    render();
+    requestAnimationFrame(() => input.focus());
   }
 
   function bindDrop(zone) {
@@ -449,7 +476,10 @@
 
   document.getElementById('addNames').addEventListener('click', addNames);
   document.getElementById('nameInput').addEventListener('keydown', e => {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') addNames();
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+      e.preventDefault();
+      addNames();
+    }
   });
 
   document.getElementById('returnAll').addEventListener('click', () => {
